@@ -39,12 +39,24 @@ function parseTimeToMinutes(timeStr, ampmOverride) {
     return hh * 60 + mm;
 }
 
-/** Utility: check if current minute is in the half-open range [start, end) handling overnight wraps. */
-function isInRange(startMin, endMin, currMin) {
-    let s = startMin, e = endMin, c = currMin;
-    if (e <= s) e += 24 * 60; // overnight
-    if (c < s && e > 24 * 60) c += 24 * 60; // shift current if comparing past midnight
-    return (c >= s && c < e);
+/**
+ * Determine if current minute is within the interval defined by start and end
+ * for entries that belong to the same calendar day. This avoids matching
+ * future-day starts when we're before the start time.
+ */
+function isInRangeForDay(startMin, endMin, currMin) {
+    let s = startMin;
+    let e = endMin;
+    if (e <= s) e += 24 * 60; // overnight range
+
+    if (e <= 24 * 60) {
+        // simple same-day range [s, e)
+        return (currMin >= s && currMin < e);
+    } else {
+        // range wraps into next day. For entries belonging to this day, only consider
+        // the portion from start until midnight; the next-day portion belongs to the next day
+        return (currMin >= s && currMin < 24 * 60);
+    }
 }
 
 /** Utility: extract the start minute from an entry like "HH:MM" or "HH:MM AM". */
@@ -97,7 +109,7 @@ function isEntryActive(entry, idx, arr, schedule, weekdays, today, currMinutes) 
         let startMin = parseTimeToMinutes(range[1], range[2]);
         let endMin = parseTimeToMinutes(range[3], range[4]);
         if (startMin === null || endMin === null) return false;
-        return isInRange(startMin, endMin, currMinutes);
+        return isInRangeForDay(startMin, endMin, currMinutes);
     }
 
     // single time: acts as 'start until next start'
@@ -107,9 +119,14 @@ function isEntryActive(entry, idx, arr, schedule, weekdays, today, currMinutes) 
         if (startMin === null) return false;
         let endMin = findNextStart(arr, idx, schedule, weekdays, today);
         if (endMin !== null) {
-            return isInRange(startMin, endMin, currMinutes);
+            // if end is within same day, just check normally
+            if (endMin <= 24 * 60) {
+                return (currMinutes >= startMin && currMinutes < endMin);
+            }
+            // end wraps to next day: only consider the portion from start to midnight for today's entry
+            return (currMinutes >= startMin && currMinutes < 24 * 60);
         }
-        // fallback: only active at exact minute
+        // fallback: only active at exact minute if we couldn't determine an end
         return currMinutes === startMin;
     }
 
