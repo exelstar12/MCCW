@@ -111,6 +111,11 @@ function collectHolidays(year){
 
 function normalizeHolidayMonth(month){
     let hm = typeof month === "number" ? Number(month) : NaN;
-    if (!isNaN(hm) && hm > 11) hm = hm - 1; // allow 1-12 input
+    // Validate month range
+    if (isNaN(hm) || hm < 1 || hm > 12) 
+        return NaN;
+    // Convert 1-12 to 0-11, because Date.getMonth() is zero-based
+    if (hm >= 1 && hm <= 12) 
+        hm = hm - 1;
     return hm;
 }
