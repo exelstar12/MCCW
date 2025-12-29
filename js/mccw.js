@@ -28,6 +28,14 @@ window.MCCW = {
     },
     helpers: {
         setColor: () => {},
+        // Returns current day/month/year in a consistent format for widgets and addons
+        getCurrentDateInfo: () => {
+            return {
+                currentDay: Number(MCCW.date.time && MCCW.date.time[2] ? MCCW.date.time[2] : MCCW.date.initial.getDate()),
+                currentMonth: MCCW.date.initial.getMonth(),
+                currentYear: MCCW.date.initial.getFullYear()
+            };
+        }
     },
     functions : {
         bootup: async () => {

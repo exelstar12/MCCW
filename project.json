@@ -284,6 +284,15 @@
 				"type" : "bool",
 				"value" : true
 			},
+			"displayPublicHolidays" : 
+			{
+				"condition" : "displayPublicHolidays.value ? displayPublicHolidays.text = displayPublicHolidays.text.replace('Disabled', 'Enabled').replace('ugcDanger','ugcSuccess') : displayPublicHolidays.text = displayPublicHolidays.text.replace('Enabled', 'Disabled').replace('ugcSuccess','ugcDanger')",
+				"index" : 26,
+				"order" : 126,
+				"text" : "Display Public Holidays",
+				"type" : "bool",
+				"value" : true
+			},
 			"displayClock" : 
 			{
 				"condition" : "displayClock.value ? displayClock.text = displayClock.text.replace('Disabled', 'Enabled').replace('ugcDanger','ugcSuccess') : displayClock.text = displayClock.text.replace('Enabled', 'Disabled').replace('ugcSuccess','ugcDanger')",

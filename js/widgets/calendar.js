@@ -3,12 +3,15 @@ var calendar_widget = {
     fill: fillWidgetCalendar
 };
 
+var calendarCells = [];
+
 function drawWidgetCalendar(){
     document.getElementById("calendar").innerHTML = "<tr><th>SU</th><th>MO</th><th>TU</th><th>WE</th><th>TH</th><th>FR</th><th>SA</th></tr>";
 
     let month = MCCW.date.initial.getMonth();
     let year = MCCW.date.initial.getFullYear();
     let days = new Date(year, month + 1, 0).getDate();
+    calendarCells = [];
     let elem = document.createElement("tr");
     let auxiliary = new Date(year, month, 1).getDay();
 
@@ -28,38 +31,29 @@ function drawWidgetCalendar(){
     };
 
     function loadCell(data){
-        // create td and attach dataset info so we can recognise today/holidays later
-        let td = document.createElement("td");
-        if (data !== ""){
-            td.dataset.day = data;
-            td.dataset.month = month; // zero-based month to match Date.getMonth()
-            td.dataset.year = year;
-            td.appendChild(document.createTextNode(data));
-        } else {
-            td.appendChild(document.createTextNode(""));
-        }
+        const td = document.createElement("td");
+        const dayVal = data !== "" ? Number(data) : null;
+        td.textContent = data;
         elem.appendChild(td);
-    };
+        calendarCells.push({ td, day: dayVal, month, year });
+    }
 
     document.getElementById("calendar").appendChild(elem);
 }
 
 
 function fillWidgetCalendar(){
-    const { currentDay, currentMonth, currentYear } = getCurrentDateInfo();
+    const { currentDay, currentMonth, currentYear } = MCCW.helpers.getCurrentDateInfo();
     let pastDayFlag = true; // Past day flag
-    const days = document.getElementById("calendar").getElementsByTagName("td");
     const holidays = collectHolidays(currentYear);
 
-    for (let i = 0; i < days.length; i++){
-        const td = days[i];
-        const dStr = td.dataset.day;
-        if (!dStr){ // skip empty leading/trailing cells
-            continue;
-        }
-        const d = Number(dStr);
-        const m = Number(td.dataset.month);
-        const y = Number(td.dataset.year);
+    for (let i = 0; i < calendarCells.length; i++){
+        const cell = calendarCells[i];
+        const td = cell.td;
+        const d = cell.day;
+        if (d === null) continue; // skip empty leading/trailing cells
+        const m = cell.month;
+        const y = cell.year;
 
         if (pastDayFlag){
             td.classList.add("past"); // Add past day class
@@ -74,48 +68,116 @@ function fillWidgetCalendar(){
     }
 }
 
-function findHolidayForDay(holidays, day, month, year){
-    for (let h of holidays){
-        const hd = Number(h.day);
-        const hm = normalizeHolidayMonth(h.month);
-        const hy = h.year ? Number(h.year) : undefined;
-
-        if (hd === day && hm === month && (hy === undefined || hy === year)){
-            return h;
+function findHolidayForDay(holidaysByMonth, day, month, year){
+    // holidaysByMonth is expected to be an array of 12 objects mapping day->holiday or day->array of holidays
+    if (!Array.isArray(holidaysByMonth) || holidaysByMonth.length !== 12) return null;
+    const monthMap = holidaysByMonth[month];
+    if (!monthMap) return null;
+    const entry = monthMap[day];
+    if (!entry) return null;
+    if (Array.isArray(entry)){
+        // prefer a holiday that explicitly matches the year if available
+        for (let h of entry){
+            const hy = h.year ? Number(h.year) : undefined;
+            if (hy === undefined || hy === year) return h;
         }
+        return entry[0];
     }
-    return null;
+    return entry;
 }
 
 function applyHolidayToTd(td, h){
     td.classList.add("holiday");
-    if (h.name) td.dataset.tooltip = h.name;  // used by custom CSS tooltip
+    if (h.name){
+        const tip = document.createElement('span');
+        tip.className = 'holiday-tooltip';
+        tip.textContent = h.name;
+        td.appendChild(tip);
+    }
 }
 
-function getCurrentDateInfo(){
-    return {
-        currentDay: Number(MCCW.date.time && MCCW.date.time[2] ? MCCW.date.time[2] : MCCW.date.initial.getDate()),
-        currentMonth: MCCW.date.initial.getMonth(),
-        currentYear: MCCW.date.initial.getFullYear()
-    };
-}
+
 
 function collectHolidays(year){
-    let holidays = [];
-    if (typeof publicHoliday === "object" && publicHoliday !== null){
-        if (Array.isArray(publicHoliday[year])) holidays = holidays.concat(publicHoliday[year]);
-        if (Array.isArray(publicHoliday.recurring)) holidays = holidays.concat(publicHoliday.recurring);
+    // If the user disabled public holidays in properties, return empty mapping
+    if (MCCW.properties && MCCW.properties.calendar && MCCW.properties.calendar.showHolidays === false){
+        return Array.from({length: 12}, () => ({}));
     }
-    return holidays;
+
+    // Build a month-indexed lookup: array of 12 objects mapping day -> holiday or day -> [holidays]
+    const holidaysByMonth = Array.from({length: 12}, () => ({}));
+    if (typeof publicHoliday === "object" && publicHoliday !== null){
+        const list = Array.isArray(publicHoliday[year]) ? publicHoliday[year] : [];
+        for (let h of list){
+            // Normalize fields (accept numbers or numeric strings and return integers)
+            const normalized = normalizeHoliday(h);
+            const hm = normalized.month;
+            const hd = normalized.day;
+            const hy = normalized.year;
+
+            // Validate normalized month and day range (month 0-11, day 1-31)
+            if (!Number.isInteger(hm) || hm < 0 || hm > 11 || !Number.isInteger(hd) || hd < 1 || hd > 31) 
+                continue;
+            if (hy !== undefined && hy !== year) continue; // skip holidays for different years
+
+            // if month/day valid, add to mapping
+            if (!holidaysByMonth[hm][hd]) 
+                holidaysByMonth[hm][hd] = h;
+            else { // else already exists, convert to array or append
+                if (!Array.isArray(holidaysByMonth[hm][hd])) 
+                    holidaysByMonth[hm][hd] = [holidaysByMonth[hm][hd]];
+                
+                // Append holiday
+                holidaysByMonth[hm][hd].push(h);
+            }
+        }
+    }
+    return holidaysByMonth;
 }
 
-function normalizeHolidayMonth(month){
-    let hm = typeof month === "number" ? Number(month) : NaN;
-    // Validate month range
-    if (isNaN(hm) || hm < 1 || hm > 12) 
-        return NaN;
-    // Convert 1-12 to 0-11, because Date.getMonth() is zero-based
-    if (hm >= 1 && hm <= 12) 
-        hm = hm - 1;
-    return hm;
+function normalizeHoliday(h){
+    // Accept numbers or numeric strings and return normalized integers:
+    const result = { month: undefined, day: undefined, year: undefined };
+
+    // Month
+    if (h.month !== undefined && h.month !== null && h.month !== ''){
+        let m = h.month;
+        if (typeof m === 'string'){
+            if (m.trim() === '') { 
+                result.month = undefined;
+            }
+            else m = Number(m);
+        }
+
+        if (m >= 1 && m <= 12)
+            result.month = m - 1;
+        else 
+            result.month = m;
+    }
+
+    // Day
+    if (h.day !== undefined && h.day !== null && h.day !== ''){
+        let d = h.day;
+        if (typeof d === 'string'){
+            if (d.trim() === '') { 
+                result.day = undefined;
+            }
+            else d = Number(d);
+        }
+        result.day = d;
+    }
+
+    // Year
+    if (h.year !== undefined && h.year !== null && h.year !== ''){
+        let y = h.year;
+        if (typeof y === 'string'){
+            if (y.trim() === '') {
+                result.year = undefined; 
+            }
+            else y = Number(y);
+        }
+        result.year = y;
+    }
+
+    return result;
 }

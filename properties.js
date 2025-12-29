@@ -134,6 +134,17 @@ window.wallpaperPropertyListener = {
                 setCSSRootVariable("--calendarDisplay", "none");
             }
         }
+
+        // Toggle showing public holidays in the calendar
+        if (properties.displayPublicHolidays){
+            MCCW.properties.calendar = MCCW.properties.calendar || {};
+            MCCW.properties.calendar.showHolidays = !!properties.displayPublicHolidays.value;
+            // Redraw calendar so the change is applied immediately
+            if (MCCW.widgets && MCCW.widgets.calendar && MCCW.widgets.calendar.draw){
+                MCCW.widgets.calendar.draw();
+                if (MCCW.widgets.calendar.fill) MCCW.widgets.calendar.fill();
+            }
+        }
         if (properties.widget_calendar_x_pos){
             setCSSRootVariable("--calendarLeft", `${properties.widget_calendar_x_pos.value}%`);
         }
